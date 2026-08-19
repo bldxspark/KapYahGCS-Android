@@ -1,0 +1,181 @@
+name: Caching
+description: Setup Caching
+inputs:
+  host:
+    description: Host OS
+    required: true
+  target:
+    description: Target OS
+    required: true
+  build-type:
+    description: Build Type
+    required: true
+  cpm-modules:
+    description: Path to CPM Modules
+    required: false
+  save-cache:
+    description: "Whether to save cache (auto = save for pushes and same-repo PRs, skip for fork PRs)"
+    required: false
+    default: 'auto'
+runs:
+  using: composite
+  steps:
+    - name: Resolve save-cache
+      id: cache-policy
+      shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        PR_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        THIS_REPO: ${{ github.repository }}
+      run: |
+        save="$(python3 -c "
+        import os, sys
+        sys.path.insert(0, os.path.join(os.environ['GITHUB_WORKSPACE'], 'tools'))
+        from common.gh_actions import resolve_cache_policy
+        print(resolve_cache_policy('${{ inputs.save-cache }}'))
+        ")"
+        echo "save=${save}" >> "$GITHUB_OUTPUT"
+
+    - name: Determine cache scope
+      id: cache-scope
+      shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        REF_NAME: ${{ github.ref_name }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: python3 "${GITHUB_WORKSPACE}/.github/scripts/ccache_helper.py" scope --event-name "${EVENT_NAME}" --ref-name "${REF_NAME}" --pr-number "${PR_NUMBER:-}"
+
+    - name: Get ccache config
+      id: ccache-config
+      shell: bash
+      run: |
+        python3 "${GITHUB_WORKSPACE}/.github/scripts/ccache_helper.py" config \
+          --target "${{ inputs.target }}" \
+          --conf "${GITHUB_WORKSPACE}/tools/configs/ccache.conf"
+
+    - name: Cache ccache binary (Linux)
+      if: runner.os == 'Linux'
+      id: ccache-binary
+      uses: actions/cache@v5
+      with:
+        path: /usr/local/bin/ccache
+        key: ccache-binary-${{ steps.ccache-config.outputs.version }}-linux-${{ steps.ccache-config.outputs.arch }}
+
+    - name: Install ccache (Linux)
+      if: runner.os == 'Linux' && steps.ccache-binary.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        python3 "${GITHUB_WORKSPACE}/.github/scripts/ccache_helper.py" install \
+          --version "${{ steps.ccache-config.outputs.version }}" \
+          --arch "${{ steps.ccache-config.outputs.arch }}"
+
+    - name: Install ccache (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        if ! command -v ccache >/dev/null 2>&1; then
+          brew install ccache
+        fi
+        ccache --version
+
+    - name: Determine Windows ccache arch
+      if: runner.os == 'Windows'
+      id: win-ccache
+      shell: bash
+      run: python3 "${GITHUB_WORKSPACE}/.github/scripts/ccache_helper.py" windows-config --host "${{ inputs.host }}" --target "${{ inputs.target }}"
+
+    - name: Cache ccache binary (Windows)
+      if: runner.os == 'Windows'
+      id: ccache-binary-win
+      uses: actions/cache@v5
+      with:
+        path: ${{ runner.temp }}/ccache-${{ steps.ccache-config.outputs.version }}-windows-${{ steps.win-ccache.outputs.arch }}/ccache.exe
+        key: ccache-binary-${{ steps.ccache-config.outputs.version }}-windows-${{ steps.win-ccache.outputs.arch }}
+
+    - name: Install ccache (Windows)
+      if: runner.os == 'Windows' && steps.ccache-binary-win.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        CCACHE_VERSION: ${{ steps.ccache-config.outputs.version }}
+        CCACHE_ARCH: ${{ steps.win-ccache.outputs.arch }}
+        CCACHE_WIN_SHA256: ${{ steps.win-ccache.outputs.sha256 }}
+      run: |
+        python3 "${GITHUB_WORKSPACE}/.github/scripts/ccache_helper.py" install-windows \
+          --version "${CCACHE_VERSION}" \
+          --arch "${CCACHE_ARCH}" \
+          --sha256 "${CCACHE_WIN_SHA256}" \
+          --runner-temp "${RUNNER_TEMP//\\//}"
+
+    - name: Add ccache to PATH (Windows)
+      if: runner.os == 'Windows'
+      shell: bash
+      env:
+        CCACHE_VERSION: ${{ steps.ccache-config.outputs.version }}
+        CCACHE_ARCH: ${{ steps.win-ccache.outputs.arch }}
+      run: python3 "${GITHUB_WORKSPACE}/.github/scripts/ccache_helper.py" add-windows-path --version "${CCACHE_VERSION}" --arch "${CCACHE_ARCH}" --runner-temp "${RUNNER_TEMP//\\//}"
+
+    - name: Configure ccache environment
+      shell: bash
+      run: python3 "${GITHUB_WORKSPACE}/.github/scripts/ccache_helper.py" configure-env --workspace "${GITHUB_WORKSPACE//\\//}"
+
+    - name: Configure CPM source cache
+      if: inputs.cpm-modules != ''
+      id: cpm-cache
+      shell: bash
+      env:
+        CPM_MODULES_INPUT: ${{ inputs.cpm-modules }}
+      run: python3 "${GITHUB_WORKSPACE}/.github/scripts/ccache_helper.py" configure-cpm-cache --path "${CPM_MODULES_INPUT}"
+
+    - name: Compute CPM dependency fingerprint
+      if: inputs.cpm-modules != ''
+      id: cpm-key
+      shell: bash
+      run: python3 "${GITHUB_WORKSPACE}/.github/scripts/ccache_helper.py" fingerprint --root "${GITHUB_WORKSPACE}"
+
+    - name: Restore Build Cache (ccache, save)
+      if: steps.cache-policy.outputs.save == 'true'
+      uses: actions/cache@v5
+      with:
+        path: ${{ github.workspace }}/.ccache
+        key: ccache-${{ inputs.host }}-${{ inputs.target }}-${{ inputs.build-type }}-${{ steps.cache-scope.outputs.scope }}-${{ hashFiles('.github/build-config.json', 'tools/configs/ccache.conf') }}-${{ github.run_id }}
+        restore-keys: |
+          ccache-${{ inputs.host }}-${{ inputs.target }}-${{ inputs.build-type }}-${{ steps.cache-scope.outputs.scope }}-
+          ccache-${{ inputs.host }}-${{ inputs.target }}-${{ inputs.build-type }}-shared-
+          ccache-${{ inputs.host }}-${{ inputs.target }}-${{ inputs.build-type }}-
+
+    - name: Restore Build Cache (ccache, read-only)
+      if: steps.cache-policy.outputs.save != 'true'
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ github.workspace }}/.ccache
+        key: ccache-${{ inputs.host }}-${{ inputs.target }}-${{ inputs.build-type }}-${{ steps.cache-scope.outputs.scope }}-${{ hashFiles('.github/build-config.json', 'tools/configs/ccache.conf') }}-${{ github.run_id }}
+        restore-keys: |
+          ccache-${{ inputs.host }}-${{ inputs.target }}-${{ inputs.build-type }}-${{ steps.cache-scope.outputs.scope }}-
+          ccache-${{ inputs.host }}-${{ inputs.target }}-${{ inputs.build-type }}-shared-
+          ccache-${{ inputs.host }}-${{ inputs.target }}-${{ inputs.build-type }}-
+
+    - name: Initialize ccache stats
+      shell: bash
+      run: ccache -z
+
+    - name: Cache CPM Modules (restore and save)
+      if: inputs.cpm-modules != '' && steps.cache-policy.outputs.save == 'true'
+      uses: actions/cache@v5
+      with:
+        path: ${{ steps.cpm-cache.outputs.path }}
+        key: cpm-modules-${{ steps.cache-scope.outputs.scope }}-${{ steps.cpm-key.outputs.fingerprint }}
+        restore-keys: |
+          cpm-modules-${{ steps.cache-scope.outputs.scope }}-
+          cpm-modules-shared-
+          cpm-modules-
+
+    - name: Cache CPM Modules (restore only)
+      if: inputs.cpm-modules != '' && steps.cache-policy.outputs.save != 'true'
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ steps.cpm-cache.outputs.path }}
+        key: cpm-modules-${{ steps.cache-scope.outputs.scope }}-${{ steps.cpm-key.outputs.fingerprint }}
+        restore-keys: |
+          cpm-modules-${{ steps.cache-scope.outputs.scope }}-
+          cpm-modules-shared-
+          cpm-modules-

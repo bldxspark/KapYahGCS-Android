@@ -1,0 +1,166 @@
+name: Android Qt
+description: Install Qt for Android
+outputs:
+  host_qt_root_dir:
+    description: Desktop Qt root used for host tools
+    value: ${{ steps.qt-host.outputs.qt_root_dir }}
+  target_qt_root_dir:
+    description: Android Qt root used for target packages
+    value: ${{ steps.qt-target.outputs.qt_root_dir }}
+inputs:
+  host:
+    description: Host
+    required: true
+  arch:
+    description: Arch
+    required: true
+  version:
+    description: Qt Version
+    required: true
+  modules:
+    description: Qt Modules
+    required: true
+  abis:
+    description: ABIs to Build
+    required: false
+    default: 'arm64-v8a;armeabi-v7a'
+  cpm-modules:
+    description: CPM Cache Path
+    required: false
+  build-type:
+    description: Build Type (Debug or Release)
+    required: false
+    default: Release
+  ndk-full-version:
+    description: Android NDK full version (use build-config.outputs.ndk_full_version)
+    required: false
+    default: '27.2.12479018'
+  java-version:
+    description: Java version (use build-config.outputs.java_version)
+    required: false
+    default: '17'
+  android-platform:
+    description: Android platform/API level (use build-config.outputs.android_platform)
+    required: false
+    default: '35'
+  android-cmdline-tools:
+    description: Android cmdline-tools version (use build-config.outputs.android_cmdline_tools)
+    required: false
+    default: '13114758'
+  android-build-tools:
+    description: Android build-tools version (use build-config.outputs.android_build_tools)
+    required: false
+    default: '35.0.0'
+  save-cache:
+    description: "Whether to save cache (auto = save for pushes and same-repo PRs, skip for fork PRs)"
+    required: false
+    default: 'auto'
+runs:
+  using: composite
+  steps:
+    - name: Setup Java Environment
+      uses: actions/setup-java@v5
+      with:
+        distribution: temurin
+        java-version: ${{ inputs.java-version }}
+        cache: gradle
+        cache-dependency-path: |
+          **/*.gradle*
+          **/gradle-wrapper.properties
+
+    - name: Setup Android Environment
+      uses: android-actions/setup-android@v3
+      with:
+        cmdline-tools-version: ${{ inputs.android-cmdline-tools }}
+        packages: 'platform-tools platforms;android-${{ inputs.android-platform }} build-tools;${{ inputs.android-build-tools }} ndk;${{ inputs.ndk-full-version }}'
+        log-accepted-android-sdk-licenses: false
+
+    - name: Update Android SDK / NDK / Tools
+      shell: bash
+      run: |
+        python3 "${GITHUB_WORKSPACE}/.github/scripts/android_sdk_helper.py" \
+          --ndk-version "${{ inputs.ndk-full-version }}" \
+          --workspace "${GITHUB_WORKSPACE}"
+
+    - name: Setup Caching
+      uses: ./.github/actions/cache
+      with:
+        host: ${{ inputs.host }}
+        target: android
+        build-type: ${{ inputs.build-type }}
+        cpm-modules: ${{ inputs.cpm-modules }}
+        save-cache: ${{ inputs.save-cache }}
+
+    - name: Install Qt for ${{ runner.os }}
+      id: qt-host
+      uses: ./.github/actions/qt-install
+      with:
+        version: ${{ inputs.version }}
+        host: ${{ inputs.host }}
+        target: desktop
+        arch: ${{ inputs.arch }}
+        dir: ${{ runner.temp }}
+        modules: ${{ inputs.modules }}
+
+    - name: Install Qt for Android (arm64_v8a)
+      if: contains(format(';{0};', inputs.abis), ';arm64-v8a;')
+      id: qt-android-arm64
+      uses: ./.github/actions/qt-install
+      with:
+        version: ${{ inputs.version }}
+        host: ${{ inputs.host }}
+        target: android
+        arch: android_arm64_v8a
+        dir: ${{ runner.temp }}
+        modules: ${{ inputs.modules }}
+        export-env: 'false'
+
+    - name: Install Qt for Android (armv7)
+      if: contains(format(';{0};', inputs.abis), ';armeabi-v7a;')
+      id: qt-android-armv7
+      uses: ./.github/actions/qt-install
+      with:
+        version: ${{ inputs.version }}
+        host: ${{ inputs.host }}
+        target: android
+        arch: android_armv7
+        dir: ${{ runner.temp }}
+        modules: ${{ inputs.modules }}
+        export-env: 'false'
+
+    - name: Install Qt for Android (x86_64)
+      if: contains(format(';{0};', inputs.abis), ';x86_64;')
+      id: qt-android-x86_64
+      uses: ./.github/actions/qt-install
+      with:
+        version: ${{ inputs.version }}
+        host: ${{ inputs.host }}
+        target: android
+        arch: android_x86_64
+        dir: ${{ runner.temp }}
+        modules: ${{ inputs.modules }}
+        export-env: 'false'
+
+    - name: Install Qt for Android (x86)
+      if: contains(format(';{0};', inputs.abis), ';x86;')
+      id: qt-android-x86
+      uses: ./.github/actions/qt-install
+      with:
+        version: ${{ inputs.version }}
+        host: ${{ inputs.host }}
+        target: android
+        arch: android_x86
+        dir: ${{ runner.temp }}
+        modules: ${{ inputs.modules }}
+        export-env: 'false'
+
+    - name: Resolve primary Android Qt root
+      id: qt-target
+      shell: bash
+      run: |
+        python3 "${GITHUB_WORKSPACE}/tools/setup/install_qt.py" resolve-android-root \
+          --abis "${{ inputs.abis }}" \
+          --arm64 "${{ steps.qt-android-arm64.outputs.qt_root_dir }}" \
+          --armv7 "${{ steps.qt-android-armv7.outputs.qt_root_dir }}" \
+          --x86-64 "${{ steps.qt-android-x86_64.outputs.qt_root_dir }}" \
+          --x86 "${{ steps.qt-android-x86.outputs.qt_root_dir }}"

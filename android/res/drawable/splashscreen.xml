@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Background -->
+    <item>
+        <color android:color="#000000"/> <!-- change if needed -->
+    </item>
+
+    <!-- Centered Logo -->
+    <item>
+        <bitmap
+            android:gravity="center"
+            android:src="@drawable/icon"
+            android:width="280dp"
+            android:height="280dp"/>
+    </item>
+
+</layer-list>

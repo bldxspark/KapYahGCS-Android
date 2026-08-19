@@ -1,0 +1,76 @@
+name: CMake Configure
+description: Configure QGroundControl build with common options
+
+inputs:
+  build-dir:
+    description: 'Build directory'
+    required: false
+    default: 'build'
+  source-dir:
+    description: 'Source directory'
+    required: false
+    default: ${{ github.workspace }}
+  build-type:
+    description: 'Build type (Debug, Release, RelWithDebInfo, MinSizeRel)'
+    required: false
+    default: 'Release'
+  generator:
+    description: 'CMake generator (Ninja, Unix Makefiles, etc.)'
+    required: false
+    default: 'Ninja'
+  testing:
+    description: 'Enable testing (QGC_BUILD_TESTING)'
+    required: false
+    default: 'false'
+  coverage:
+    description: 'Enable coverage (QGC_ENABLE_COVERAGE)'
+    required: false
+    default: 'false'
+  stable:
+    description: 'Stable build (QGC_STABLE_BUILD)'
+    required: false
+    default: 'false'
+  unity-build:
+    description: 'Enable unity build for faster compilation'
+    required: false
+    default: 'false'
+  unity-batch-size:
+    description: 'Unity build batch size'
+    required: false
+    default: '16'
+  extra-args:
+    description: 'Additional CMake arguments'
+    required: false
+    default: ''
+  use-qt-cmake:
+    description: 'Use qt-cmake instead of cmake'
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Create build directory
+      shell: bash
+      env:
+        INPUT_BUILD_DIR: ${{ inputs.build-dir }}
+      run: mkdir -p "${INPUT_BUILD_DIR}"
+
+    - name: Configure
+      shell: bash
+      run: |
+        ARGS=(configure
+          --source-dir "${{ inputs.source-dir }}"
+          --build-dir "${{ inputs.build-dir }}"
+          --generator "${{ inputs.generator }}"
+          --build-type "${{ inputs.build-type }}"
+        )
+        [[ "${{ inputs.testing }}" == "true" ]] && ARGS+=(--testing)
+        [[ "${{ inputs.coverage }}" == "true" ]] && ARGS+=(--coverage)
+        [[ "${{ inputs.stable }}" == "true" ]] && ARGS+=(--stable)
+        [[ "${{ inputs.use-qt-cmake }}" != "true" ]] && ARGS+=(--no-qt-cmake)
+        if [[ "${{ inputs.unity-build }}" == "true" ]]; then
+          ARGS+=(--unity-build --unity-batch-size "${{ inputs.unity-batch-size }}")
+        fi
+        [[ -n "${{ inputs.extra-args }}" ]] && ARGS+=("--extra-args=${{ inputs.extra-args }}")
+        python3 "${GITHUB_WORKSPACE}/.github/scripts/cmake_helper.py" "${ARGS[@]}"

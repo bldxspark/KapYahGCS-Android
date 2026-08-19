@@ -1,0 +1,51 @@
+codecov:
+  require_ci_to_pass: true
+  notify:
+    after_n_builds: 1  # Only Linux Debug generates coverage
+    wait_for_ci: true
+
+coverage:
+  precision: 2
+  round: down
+  range: "30...90"
+
+  status:
+    project:
+      default:
+        target: 30%
+        threshold: 2%
+        base: auto
+        if_ci_failed: error
+    patch:
+      default:
+        target: 40%
+        threshold: 5%
+        base: auto
+        if_ci_failed: error
+
+comment:
+  layout: "reach,diff,flags,tree,footer"
+  behavior: default
+  require_changes: false
+  require_base: false
+  require_head: true
+
+ignore:
+  - "test/**/*"
+  - "tools/**/*"
+  - "deploy/**/*"
+  - "custom/**/*"
+  - "libs/**/*"
+  - "*.qml"
+  - "*.js"
+  - "android/**/*"
+
+flags:
+  debug:
+    paths:
+      - src/
+    carryforward: true
+  release:
+    paths:
+      - src/
+    carryforward: true

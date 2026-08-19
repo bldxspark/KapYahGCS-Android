@@ -1,0 +1,120 @@
+name: Install Dependencies
+description: Install platform-specific build dependencies (GStreamer, etc.)
+
+inputs:
+  gstreamer:
+    description: 'Install GStreamer (Windows x64 only)'
+    required: false
+    default: 'true'
+  gstreamer-version:
+    description: 'GStreamer version (default: from build-config.json)'
+    required: false
+    default: ''
+  vulkan:
+    description: 'Install Vulkan SDK (Windows only, for validation layers)'
+    required: false
+    default: 'false'
+  extra-packages:
+    description: 'Additional packages to install (space-separated, Linux only)'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Install dependencies (Windows)
+      if: runner.os == 'Windows'
+      uses: nick-fields/retry@v3
+      env:
+        INPUT_GSTREAMER: ${{ inputs.gstreamer }}
+        INPUT_GSTREAMER_VERSION: ${{ inputs.gstreamer-version }}
+        INPUT_VULKAN: ${{ inputs.vulkan }}
+      with:
+        timeout_minutes: 10
+        max_attempts: 3
+        shell: python
+        command: |
+          import os, subprocess, sys
+          args = [sys.executable, './tools/setup/install_dependencies.py', '--platform', 'windows']
+          if os.environ.get('INPUT_GSTREAMER_VERSION'):
+              args += ['--gstreamer-version', os.environ['INPUT_GSTREAMER_VERSION']]
+          if os.environ.get('INPUT_GSTREAMER') != 'true':
+              args.append('--skip-gstreamer')
+          if os.environ.get('INPUT_VULKAN') == 'true':
+              args.append('--vulkan')
+          sys.exit(subprocess.run(args).returncode)
+
+    - name: Get system package list (Linux)
+      if: runner.os == 'Linux'
+      id: linux-deps
+      shell: bash
+      run: |
+        packages=$(python3 tools/setup/install_dependencies.py --platform debian --print-packages)
+        echo "packages=${packages}" >> "$GITHUB_OUTPUT"
+
+    - name: Enable universe repository (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: python3 "${GITHUB_WORKSPACE}/.github/scripts/install_dependencies_helper.py" enable-universe
+
+    - name: Cache and install apt packages (Linux)
+      if: runner.os == 'Linux'
+      uses: awalsh128/cache-apt-pkgs-action@v1.6.0
+      with:
+        packages: ${{ steps.linux-deps.outputs.packages }}
+        version: linux-deps-v2-${{ hashFiles('tools/setup/install_dependencies.py', '.github/build-config.json', '.github/actions/install-dependencies/action.yml') }}
+
+    - name: Fix apt alternatives after cache restore (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: python3 "${GITHUB_WORKSPACE}/.github/scripts/install_dependencies_helper.py" fix-apt-alternatives
+
+    - name: Install optional apt packages (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: python3 "${GITHUB_WORKSPACE}/.github/scripts/install_dependencies_helper.py" install-optional
+
+    - name: Detect Python version for pipx cache (Linux)
+      if: runner.os == 'Linux'
+      id: python-version
+      shell: bash
+      run: python3 "${GITHUB_WORKSPACE}/.github/scripts/install_dependencies_helper.py" detect-python-version
+
+    - name: Cache pipx and pip downloads (Linux)
+      if: runner.os == 'Linux'
+      uses: actions/cache@v5
+      with:
+        path: |
+          ~/.cache/pip
+          ~/.local/pipx
+        key: pipx-linux-v2-py${{ steps.python-version.outputs.minor }}-${{ hashFiles('tools/setup/install_dependencies.py', '.github/actions/install-dependencies/action.yml') }}
+        restore-keys: |
+          pipx-linux-v2-py${{ steps.python-version.outputs.minor }}-
+          pipx-linux-v2-
+
+    - name: Install pipx packages (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: python3 tools/setup/install_dependencies.py --platform debian --skip-system-packages
+
+    - name: Install extra packages (Linux)
+      if: runner.os == 'Linux' && inputs.extra-packages != ''
+      uses: nick-fields/retry@v3
+      env:
+        EXTRA_PACKAGES: ${{ inputs.extra-packages }}
+      with:
+        timeout_minutes: 5
+        max_attempts: 3
+        command: |
+          validated="$(python3 tools/setup/install_dependencies.py --validate-extra-packages $EXTRA_PACKAGES)"
+          # shellcheck disable=SC2086
+          sudo apt-get install -y $validated
+
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS'
+      uses: nick-fields/retry@v3
+      with:
+        timeout_minutes: 10
+        max_attempts: 3
+        command: |
+          python3 tools/setup/install_dependencies.py --platform macos

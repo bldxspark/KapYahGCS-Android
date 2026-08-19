@@ -1,0 +1,83 @@
+name: iOS
+
+# iOS builds are experimental - manual trigger only until stable
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+  actions: read
+  security-events: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 120
+
+    strategy:
+      matrix:
+        build_type: [Release]
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      PACKAGE: QGroundControl
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout repo
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 1 || 0 }}
+          fetch-tags: ${{ github.event_name != 'pull_request' }}
+
+      - name: Get build config
+        id: config
+        uses: ./.github/actions/build-config
+
+      - name: Initial Setup
+        uses: ./.github/actions/common
+
+      - name: Install Qt (macOS host + iOS)
+        uses: ./.github/actions/qt-ios
+        with:
+          version: ${{ steps.config.outputs.qt_version }}
+          modules: ${{ steps.config.outputs.qt_modules }}
+          ios-modules: ${{ steps.config.outputs.qt_modules_ios }}
+          xcode-version: ${{ steps.config.outputs.xcode_ios_version }}
+          cpm-modules: ${{ runner.temp }}/build/cpm_modules
+          build-type: ${{ matrix.build_type }}
+
+      - name: Configure
+        uses: ./.github/actions/cmake-configure
+        with:
+          build-dir: ${{ runner.temp }}/build
+          build-type: ${{ matrix.build_type }}
+          stable: ${{ (github.ref_type == 'tag' || contains(github.ref, 'Stable')) && 'true' || 'false' }}
+          extra-args: -DQT_HOST_PATH=${{ env.QT_ROOT_DIR }}/../macos
+
+      - name: Build
+        uses: ./.github/actions/cmake-build
+        with:
+          build-dir: ${{ runner.temp }}/build
+          build-type: ${{ matrix.build_type }}
+
+      - name: Attest and Upload
+        if: matrix.build_type == 'Release'
+        uses: ./.github/actions/attest-and-upload
+        with:
+          artifact-name: ${{ env.PACKAGE }}.app
+          package-name: ${{ env.PACKAGE }}
+          upload-aws: 'false'
