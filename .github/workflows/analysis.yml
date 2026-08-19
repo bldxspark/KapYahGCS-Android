@@ -45,7 +45,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
@@ -60,7 +60,7 @@ jobs:
 
       - name: Prepare apt repositories (clazy)
         if: inputs.tool == 'clazy'
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 5
           max_attempts: 3
@@ -73,7 +73,7 @@ jobs:
 
       - name: Cache and install clazy packages
         if: inputs.tool == 'clazy'
-        uses: awalsh128/cache-apt-pkgs-action@v1.6.0
+        uses: awalsh128/cache-apt-pkgs-action@v1.6.3
         with:
           packages: clazy ninja-build
           version: clazy-linux-v1
