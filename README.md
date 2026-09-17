@@ -11,6 +11,8 @@ This software is part of the KapYah product ecosystem and is intended to support
 - [View Latest Release](https://github.com/bldxspark/KapYahGCS-Android/releases)  
 - APK: `KapYah-GCS-v1.0.0.apk`
 
+[Desktop Version](https://github.com/bldxspark/KapYahGCS-Desktop)
+
 ### Android Installation Note
 
 When installing the APK manually, Android may show a warning such as *"App not installed"* or block installation.
