@@ -60,11 +60,11 @@ jobs:
 
       - name: Checkout
         if: steps.action.outputs.mode != 'skip'
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Upload sources to Crowdin
         if: steps.action.outputs.mode == 'upload'
-        uses: crowdin/github-action@v2
+        uses: crowdin/github-action@v3
         with:
           config: 'docs/crowdin_docs.yml'
           upload_sources: true
@@ -78,7 +78,7 @@ jobs:
 
       - name: Download translations from Crowdin
         if: steps.action.outputs.mode == 'download'
-        uses: crowdin/github-action@v2
+        uses: crowdin/github-action@v3
         with:
           config: 'docs/crowdin_docs.yml'
           upload_sources: false
