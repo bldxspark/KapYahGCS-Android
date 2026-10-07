@@ -34,7 +34,7 @@ jobs:
 
       - name: Get PR number
         id: pr
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const run = context.payload.workflow_run;
@@ -59,7 +59,7 @@ jobs:
       - name: Check if all platform workflows are complete
         id: gate
         if: steps.pr.outputs.result != 'null'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           PLATFORM_WORKFLOWS: ${{ env.PLATFORM_WORKFLOWS }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
@@ -97,7 +97,7 @@ jobs:
 
       - name: Checkout
         if: steps.pr.outputs.result != 'null' && steps.gate.outputs.ready == 'true'
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           sparse-checkout: |
             .github/actions/download-all-artifacts
@@ -177,7 +177,7 @@ jobs:
 
       - name: Restore baseline sizes
         if: steps.pr.outputs.result != 'null' && steps.builds.outputs.all_complete == 'true'
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         continue-on-error: true
         with:
           path: baseline-sizes.json
@@ -185,7 +185,7 @@ jobs:
 
       - name: Restore baseline coverage
         if: steps.pr.outputs.result != 'null' && steps.builds.outputs.all_complete == 'true'
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         continue-on-error: true
         with:
           path: baseline-coverage.xml
@@ -213,7 +213,7 @@ jobs:
 
       - name: Deduplicate prior build-results comments
         if: steps.pr.outputs.result != 'null' && steps.gate.outputs.ready == 'true'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           PR_NUMBER: ${{ steps.pr.outputs.result }}
         with:
@@ -271,7 +271,7 @@ jobs:
     steps:
       - name: Check if all platform workflows succeeded
         id: gate
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           PLATFORM_WORKFLOWS: ${{ env.PLATFORM_WORKFLOWS }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
@@ -309,7 +309,7 @@ jobs:
 
       - name: Checkout
         if: steps.gate.outputs.ready == 'true'
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           sparse-checkout: |
             .github/actions/download-all-artifacts
@@ -383,7 +383,7 @@ jobs:
 
       - name: Cache artifact sizes as latest
         if: steps.ready.outputs.ready == 'true' && hashFiles('baseline-sizes.json') != ''
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: baseline-sizes.json
           key: artifact-sizes-baseline-latest
@@ -401,7 +401,7 @@ jobs:
 
       - name: Save coverage baseline
         if: steps.ready.outputs.ready == 'true' && hashFiles('baseline-coverage.xml') != ''
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: baseline-coverage.xml
           key: coverage-baseline-latest
