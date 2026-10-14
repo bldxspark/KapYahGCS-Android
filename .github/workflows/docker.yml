@@ -34,7 +34,7 @@ jobs:
       android: ${{ steps.detect-android.outputs.any }}
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Detect Linux changes
@@ -59,7 +59,7 @@ jobs:
       has_jobs: ${{ steps.plan.outputs.has_jobs }}
     steps:
       - name: Checkout planner
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
           sparse-checkout: |
@@ -111,7 +111,7 @@ jobs:
           rm_cmd: rmz
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
@@ -162,7 +162,7 @@ jobs:
 
       - name: Restore Trivy DB cache
         if: steps.artifact.outputs.found == 'true'
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/trivy
           key: trivy-db-v1-${{ runner.os }}-${{ matrix.platform }}-${{ steps.trivy-cache-key.outputs.week }}-${{ hashFiles('.github/trivy.yaml') }}
@@ -172,7 +172,7 @@ jobs:
 
       - name: Scan artifact for vulnerabilities
         if: steps.artifact.outputs.found == 'true'
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: 'fs'
           scan-ref: ${{ steps.artifact.outputs.path }}
