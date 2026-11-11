@@ -100,7 +100,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 1 || 0 }}
           fetch-tags: ${{ github.event_name != 'pull_request' }}
@@ -117,7 +117,7 @@ jobs:
         uses: ./.github/actions/install-dependencies
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v5
+        uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
 
@@ -246,7 +246,7 @@ jobs:
       - name: AVD Cache
         if: ${{ matrix.emulator }}
         id: avd-cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ~/.android/avd/*
